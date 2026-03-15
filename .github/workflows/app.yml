@@ -11,79 +11,55 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Set working dir so all dbt commands find dbt_project.yml
+    defaults:
+      run:
+        working-directory: ./dedamdev
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip -- non-cache-dir
-          pip install dbt-core dbt-bigquery
-
-      # Profiles setup BEFORE any dbt commands
-      - name: Setup dbt profiles
-        run: |
-          mkdir -p ~/.dbt
-          cat > ~/.dbt/profiles.yml << EOF
-          dedamdev:
-            target: dev
-            outputs:
-              dev:
-                type: bigquery
-                method: service-account
-                project: ${{ secrets.GCP_PROJECT_ID }}
-                dataset: ${{ secrets.BQ_DATASET }}
-                keyfile_json: ${{ secrets.GCP_SA_KEY }}
-                threads: 4
-                timeout_seconds: 300
-                location: ${{ secrets.BQ_LOCATION }}
-          EOF
-
-      - name: Debug environment
-        run: dbt debug
-
-      # Correct dbt run command
-      - name: Run dbt
-        run: dbt run
-
-  deploy-dbt:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      #  deploy job needs its own setup
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+          python-version: '3.11'  
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install dbt-core dbt-bigquery
 
+      # Write profiles.yml using Python to avoid heredoc indentation bugs
       - name: Setup dbt profiles
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          BQ_DATASET: ${{ secrets.BQ_DATASET }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          BQ_LOCATION: ${{ secrets.BQ_LOCATION }}
         run: |
           mkdir -p ~/.dbt
-          cat > ~/.dbt/profiles.yml << EOF
+          python - <<'PYEOF'
+          import os, textwrap
+          profile = textwrap.dedent(f"""
           dedamdev:
             target: dev
             outputs:
               dev:
                 type: bigquery
                 method: service-account
-                project: ${{ secrets.GCP_PROJECT_ID }}
-                dataset: ${{ secrets.BQ_DATASET }}
-                keyfile_json: ${{ secrets.GCP_SA_KEY }}
+                project: {os.environ['GCP_PROJECT_ID']}
+                dataset: {os.environ['BQ_DATASET']}
+                keyfile_json: {os.environ['GCP_SA_KEY']}
                 threads: 4
                 timeout_seconds: 300
-                location: ${{ secrets.BQ_LOCATION }}
-          EOF
+                location: {os.environ['BQ_LOCATION']}
+          """).strip()
+          with open(os.path.expanduser("~/.dbt/profiles.yml"), "w") as f:
+              f.write(profile)
+          PYEOF
+
+      - name: Debug environment
+        run: dbt debug
 
       - name: Run dbt seed
         run: dbt seed
@@ -91,9 +67,61 @@ jobs:
       - name: Run dbt run
         run: dbt run
 
-      - name: Run dbt tests
+      - name: Run dbt test
         run: dbt test
 
-      #  Only generate docs, don't serve (would hang CI)
       - name: Generate dbt docs
         run: dbt docs generate
+
+  deploy-dbt:
+    needs: build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./dedamdev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dbt-core dbt-bigquery
+
+      - name: Setup dbt profiles
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          BQ_DATASET: ${{ secrets.BQ_DATASET }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          BQ_LOCATION: ${{ secrets.BQ_LOCATION }}
+        run: |
+          mkdir -p ~/.dbt
+          python - <<'PYEOF'
+          import os, textwrap
+          profile = textwrap.dedent(f"""
+          dedamdev:
+            target: dev
+            outputs:
+              dev:
+                type: bigquery
+                method: service-account
+                project: {os.environ['GCP_PROJECT_ID']}
+                dataset: {os.environ['BQ_DATASET']}
+                keyfile_json: {os.environ['GCP_SA_KEY']}
+                threads: 4
+                timeout_seconds: 300
+                location: {os.environ['BQ_LOCATION']}
+          """).strip()
+          with open(os.path.expanduser("~/.dbt/profiles.yml"), "w") as f:
+              f.write(profile)
+          PYEOF
+
+      - name: Run dbt run
+        run: dbt run
+
+      - name: Run dbt test
+        run: dbt test
