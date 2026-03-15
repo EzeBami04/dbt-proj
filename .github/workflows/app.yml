@@ -12,10 +12,10 @@ jobs:
     build:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v2
+            - uses: actions/checkout@v4
             
             - name: Set up Python
-              uses: actions/setup-python@v2
+              uses: actions/setup-python@v4
               with:
                 python-version: '3.10'
 
@@ -27,7 +27,39 @@ jobs:
             - name: Run dbt
               run: |
                 dbt run dbt-core dbt-bigquery
-            
-            
-            
 
+            - name: Setup dbt profiles
+              run: |
+                mkdir -p ~/.dbt
+                echo "${{secrets.PROFILES_YML}}" > ~/.dbt/profiles.yml
+                cat > ~/.dbt/profiles.yml << EOF
+                dedamdev:
+                  target: dev
+                  outputs:
+                    dev:
+                      type: bigquery
+                      method: service-account
+                      project: ${{ secrets.GCP_PROJECT_ID }}
+                      dataset: ${{ secrets.BQ_DATASET }}
+                      keyfile: ${{ secrets.GCP_SA_KEY }}
+                      threads = 4
+                      timeout_seconds = 300
+                      location = ${{ secrets.BQ_LOCATION }}
+                EOF
+            
+            - name: Debug environment
+              run: dbt debug
+            
+            - name: Run dbt tests
+              run: dbt test
+
+            - name: Run dbt docs
+              run: |
+                dbt docs generate
+                dbt docs serve
+            
+            - name: Run dbt seed
+              run: dbt seed
+            
+            - name: Run dbt run
+              run: dbt run
