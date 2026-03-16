@@ -110,7 +110,7 @@ jobs:
                 type: bigquery
                 method: service-account
                 project: {os.environ['GCP_PROJECT_ID']}
-                dataset: {os.environ['BQ_DATASET']}
+                schema: {os.environ['BQ_DATASET']}
                 keyfile_json: {os.environ['GCP_SA_KEY']}
                 threads: 4
                 timeout_seconds: 300
