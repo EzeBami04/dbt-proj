@@ -29,7 +29,7 @@ jobs:
           python -m pip install --upgrade pip 
           pip install dbt-core dbt-bigquery
 
-      # Write profiles.yml using Python to avoid heredoc indentation bugs
+      # Write profiles.yml using Python to avoid heredoc indentation bugs..
       - name: Setup dbt profiles
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
